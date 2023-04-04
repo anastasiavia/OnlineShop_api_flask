@@ -1,6 +1,6 @@
 from werkzeug.security import generate_password_hash
 from database.manager import DBManager
-from database.schemas import UserSchema, ItemSchema, OrderSchema, AddressSchema
+from database.schemas import UserSchema, ItemSchema, OrderSchema
 from typing import Union
 
 import random
@@ -11,16 +11,16 @@ import sqlalchemy
 session = DBManager().session()
 
 
-def create_address(street: str, city: str, house_number: int) -> int:
-    address = AddressSchema(
-        idaddress=random.randint(1, 10000),
-        street=street,
-        city=city,
-        house_number=house_number
-    )
-    session.add(address)
-    session.commit()
-    return address.idaddress
+# def create_address(street: str, city: str, house_number: int) -> int:
+#     address = AddressSchema(
+#         idaddress=random.randint(1, 10000),
+#         street=street,
+#         city=city,
+#         house_number=house_number
+#     )
+#     session.add(address)
+#     session.commit()
+#     return address.idaddress
 
 
 def get_user(query_id: Union[int, str], by=UserSchema.iduser) -> UserSchema:
@@ -30,18 +30,16 @@ def get_user(query_id: Union[int, str], by=UserSchema.iduser) -> UserSchema:
 
 def create_user(
         username: str, firstname: str, lastname: str, email: str,
-        password: str, phone: str, address_id: int, is_admin: bool = False
+        password: str, phone: str, is_admin: bool = False
 ) -> int:
     password_hash = generate_password_hash(password)
     user = UserSchema(
-        iduser=random.randint(1, 10000),
         username=username,
         firstname=firstname,
         lastname=lastname,
         email=email,
         password=password_hash,
         phone=phone,
-        address_id=address_id,
         is_admin=is_admin
     )
     session.add(user)
@@ -67,21 +65,24 @@ def update_user(
     return user_id
 
 
+
 def delete_user(user_id: int) -> int:
-    session.query(OrderSchema).filter(user_id == OrderSchema.user_id).delete()
+
     session.query(UserSchema).filter(user_id == UserSchema.iduser).delete()
     session.commit()
     return user_id
 
 
-def create_item(name: str, amount: int, price: int, category: str, status: str) -> int:
+def create_item(name: str, amount: int, price: int, category: str, status: str, description: str, image: str) -> int:
     item = ItemSchema(
-        iditem=random.randint(1, 10000),
         name=name,
         amount=amount,
         price=price,
         category=category,
-        status=status
+        status=status,
+        description=description,
+        image=image
+
     )
     session.add(item)
     session.commit()
@@ -105,13 +106,12 @@ def delete_item(item_id: int, item_record: ItemSchema) -> int:
     return item_id
 
 
-def create_order(quantity: int, status: str, payment_method: str, user_id: int, item_id: int) -> int:
+def create_order(quantity: int, address: str, cost: int, message: str, user_id: int, item_id: int) -> int:
     order_record = OrderSchema(
-        idorder=random.randint(1, 10000),
         quantity=quantity,
-        orderDate=datetime.datetime.now(),
-        status=status,
-        payment_method=payment_method,
+        address=address,
+        cost=cost,
+        message=message,
         user_id=user_id,
         item_id=item_id,
 

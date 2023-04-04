@@ -1,21 +1,22 @@
 from werkzeug.security import generate_password_hash
 from database.manager import DBManager
-from database.schemas import UserSchema, ItemSchema, AddressSchema, OrderSchema
+from database.schemas import UserSchema, ItemSchema, OrderSchema
 import tests.config as test_config
 import copy
+
 
 
 def create_dummy_user(user_payload: dict, address_payload: dict) -> int:
     session = DBManager().session()
 
-    address = AddressSchema(**address_payload)
+    # address = AddressSchema(**address_payload)
 
     test_user: dict = copy.deepcopy(user_payload)
     test_user["password"] = generate_password_hash(test_user.get("password"))
     user = UserSchema(**test_user)
     user_id = copy.copy(user.iduser)
 
-    session.add(address)
+    # session.add(address)
     session.add(user)
     session.commit()
     session.close()
@@ -27,7 +28,6 @@ def delete_dummy_user(user_payload: dict, address_payload: dict) -> int:
 
     session.query(OrderSchema).filter(user_payload.get("iduser") == OrderSchema.user_id).delete()
     session.query(UserSchema).filter(user_payload.get("iduser") == UserSchema.iduser).delete()
-    session.query(AddressSchema).filter(address_payload.get("idaddress") == AddressSchema.idaddress).delete()
 
     session.commit()
     session.close()

@@ -8,7 +8,9 @@ class UserCreation(Schema):
     email = fields.String()
     password = fields.String()
     phone = fields.String()
-    address_id = fields.Integer()
+
+
+
 
 
 class ItemCreation(Schema):
@@ -17,12 +19,14 @@ class ItemCreation(Schema):
     price = fields.Integer(validate=[validate.Range(min=0, min_inclusive=True, error="Price can`t be 0<")])
     category = fields.String()
     status = fields.String()
+    description = fields.String()
+    image = fields.String()
 
 
 class OrderCreation(Schema):
     quantity = fields.Integer()
-    orderDate = fields.String()
-    status = fields.String()
-    payment_method = fields.String()
+    address = fields.String()
+    cost = fields.Integer()
+    message = fields.String()
     user_id = fields.Integer()
     item_id = fields.Integer()

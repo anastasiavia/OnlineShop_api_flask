@@ -1,16 +1,39 @@
+import datetime
+
+
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt, jwt_required
 from werkzeug.security import check_password_hash
 from marshmallow.exceptions import ValidationError
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 
-from api.schemas import UserCreation, ItemCreation, OrderCreation
-from api.auth import auth, validate_user, require_role
+from schemas import UserCreation, ItemCreation, OrderCreation
+from auth import auth, validate_user, require_role
 from database.schemas import UserSchema
 import database.crud as db
-
+from flask_cors import CORS
 import sqlalchemy.exc as sql_exception
 
 
+
 app = Flask(__name__)
+app.config["JWT_SECRET_KEY"] = 'd5fb8c4fa8bd46638dadc4e751e0d68d'
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=4)
+app.config['JWT_BLACKLIST_ENABLED'] = True
+app.config['JWT_BLACKLIST_TOKEN_CHECKS'] = ['access', 'refresh']
+jwt = JWTManager(app)
+CORS(app)
+
+blacklist = set()
+@jwt.token_in_blocklist_loader
+def check_if_token_in_blacklist(some, decrypted_token):
+    jti = decrypted_token['jti']
+    return jti in blacklist
+
+
+def check_if_token_is_revoked(some, token):
+    jti = token["jti"]
+    token_in_redis = blacklist.get(jti)
+    return token_in_redis is not None
 
 
 @app.route('/user', methods=['POST'])
@@ -20,7 +43,7 @@ def post_user():
         user_id = db.create_user(
             username=user.get("username"), firstname=user.get("firstname"), lastname=user.get("lastname"),
             email=user.get("email"), password=user.get("password"),
-            phone=user.get("phone"), address_id=user.get("address_id")
+            phone=user.get("phone")
         )
     except (ValidationError, sql_exception.IntegrityError) as e:
         response = {
@@ -32,10 +55,15 @@ def post_user():
     return response
 
 
-@app.route('/user/login', methods=['GET'])
+@app.route('/user/login', methods=['POST'])
 def login():
-    request_auth = request.authorization
-    username, password = request_auth.username, request_auth.password
+    username = request.json.get("username")
+    password = request.json.get("password")
+
+
+
+    # request_auth = request.authorization
+    # username, password = request_auth.username, request_auth.password
 
     if not auth or not username or not password:
         response = {
@@ -46,7 +74,10 @@ def login():
 
     user: UserSchema = db.get_user(query_id=username, by=UserSchema.username)
     if user and check_password_hash(user.password, password):
-        return UserCreation().dump(user)
+        resp = jsonify(success=True)
+        resp.status_code = 200
+        token = create_access_token("common_user")
+        return {'token': token.decode('utf-8')}
     else:
         response = {
             "code": 400,
@@ -63,7 +94,7 @@ def get_all_users():
 
 
 @app.route('/user/<string:username>', methods=['GET'])
-@auth.login_required
+# @auth.login_required
 def get_user_by_usernames(username):
     user_record: UserSchema = db.get_user(query_id=username, by=UserSchema.username)
     if not user_record:
@@ -78,9 +109,12 @@ def get_user_by_usernames(username):
 
 
 @app.route('/user/logout', methods=['GET'])
-@auth.login_required
+@jwt_required()
+
 def logout():
-    return make_response({"message": "Successfully logged out"}, 200)
+    jti = get_jwt()["jti"]
+    blacklist.add(jti)
+    return "Logout successful"
 
 
 @app.route('/user/<int:iduser>', methods=['PUT'])
@@ -140,8 +174,8 @@ def delete_user(iduser):
 
 
 @app.route('/item', methods=["POST"])
-@auth.login_required
-@require_role()
+# @auth.login_required
+# @require_role()
 def post_item():
     request_json = request.get_json()
 
@@ -149,7 +183,7 @@ def post_item():
         item = ItemCreation().load(request_json)
         item_id = db.create_item(
             name=item.get("name"), amount=item.get("amount"), price=item.get("price"),
-            category=item.get("category"), status=item.get("status")
+            category=item.get("category"), status=item.get("status"), description=item.get("description"), image=item.get("image")
         )
     except ValidationError as e:
         response = {
@@ -159,6 +193,24 @@ def post_item():
         return make_response(response, 400)
     respose = make_response({"itemId": item_id}, 200)
     return respose
+# def post_item():
+#     request_json = request.form.to_dict()
+#     try:
+#         item = ItemCreation().load(request_json)
+#         photo_file = request.files.get('photo')
+#         photo_path = save_photo(photo_file)
+#         item_id = db.create_item(
+#             name=item.get("name"), amount=item.get("amount"), price=item.get("price"),
+#             category=item.get("category"), status=item.get("status"), image=photo_path
+#         )
+#     except ValidationError as e:
+#         response = {
+#             "code": 400,
+#             "message": f"Server crashed with the following error: {str(e)}"
+#         }
+#         return make_response(response, 400)
+#     response = make_response({"itemId": item_id}, 200)
+#     return response
 
 
 @app.route('/item/<int:iditem>', methods=['PUT'])
@@ -192,7 +244,7 @@ def update_item(iditem):
 
 
 @app.route('/item/<iditem>', methods=["GET"])
-@auth.login_required
+# @auth.login_required
 def get_item_by_id(iditem):
     item_record = db.get_item(iditem)
     if not item_record:
@@ -224,7 +276,7 @@ def delete_item(iditem):
 
 
 @app.route('/store/order', methods=["POST"])
-@auth.login_required
+@jwt_required()
 def post_order():
     request_json = request.get_json()
     try:
@@ -234,7 +286,7 @@ def post_order():
 
         # create database record
         order_id = db.create_order(
-            quantity=order.get('quantity'), status=order.get('status'), payment_method=order.get('payment_method'),
+            quantity=order.get('quantity'), address=order.get('address'), cost=order.get('cost'), message=order.get('message'),
             user_id=order.get('user_id'), item_id=order.get('item_id')
         )
         print(order_id)
@@ -296,7 +348,7 @@ def delete_order(idorder):
 
 @app.route('/store/inventory', methods=['GET'])
 def return_inventory():
-    return make_response({"inventory": db.get_store_inventory()}, 200)
+    return make_response(db.get_store_inventory(), 200)
 
 
 if __name__ == '__main__':
